@@ -34,7 +34,7 @@
 
 (defn make-method [{:keys [baseUrl] :as api-discovery}
                    upper-parameters
-                   {:strs [httpMethod path parameters request operationId]
+                   {:strs [httpMethod path parameters operationId]
                     :as   method-discovery}]
   ;(prn baseUrl operationId (keys method-discovery) path)
   (let [parameters (into upper-parameters parameters)
@@ -51,26 +51,33 @@
                              (filter (comp #(= % "query") #(get % "in")))
                              (map (juxt (comp keyword #(get % "name")) identity)))
                            parameters)
+        body-params (into []
+                           (comp
+                             (filter (comp #(= % "body") #(get % "in"))))
+                           parameters)
+        request      (first body-params)
         query-ks     (into [] (map key) query-params)
         key-sel-fn   (fn [m]
                        (fast-select-keys m query-ks))]
     ;(prn (keys method-discovery))
     [(keyword operationId) {:id          operationId
-         :description (get method-discovery "description")
-         :preform
-                      (fn [client op]
-                        (-> init-map
-                            (assoc :url (str baseUrl (path-fn op)))
+                            :description (get method-discovery "description")
+                            :preform
+                                         (fn [client op]
+                                           (prn method-discovery)
+                                           (-> init-map
+                                               (assoc :url (str baseUrl (path-fn op)))
 
-                            (assoc :query-params (key-sel-fn op)
-                                   ; :aleph/save-request-message lastmessage
-                                   :throw-exceptions false)
-                            (cond->
-                              request (assoc :body (let [enc-body (:request op)]
-                                                     (assert enc-body (str "Request cannot be nil for operation "  (:op op)))
-                                                     (cheshire.core/generate-string enc-body))))
-                            ;(doto prn)
-                            http/request))}]))
+                                               (assoc :query-params (key-sel-fn op)
+                                                      :aleph/save-request-message lastmessage
+                                                      :throw-exceptions false)
+                                               (cond->
+                                                 request (assoc :body (let [enc-body (:request op)]
+                                                                        (assert enc-body (str "Request cannot be nil for operation " (:op op)))
+                                                                        (doto (cheshire.core/generate-string enc-body)
+                                                                          prn))))
+                                               (doto prn)
+                                               http/request))}]))
 
 (defn prepare-methods [api-discovery path parameters methods]
   (reduce-kv
