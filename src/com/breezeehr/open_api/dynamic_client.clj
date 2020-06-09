@@ -1,6 +1,8 @@
 (ns com.breezeehr.open-api.dynamic-client
   (:require [cheshire.core :as json]
             [aleph.http :as http]
+            [byte-streams :as bs]
+            [cheshire.core :as json]
             [cemerick.url :as url]
             [clojure.string :as str]))
 
@@ -124,12 +126,14 @@
 (defn init-client [config]
   config)
 
+(def lastmessage (atom nil) )
+
 (defn get-openapi-spec [client base-url path]
   (->
     {:method :get
      :url    (str base-url path)}
     (assoc :throw-exceptions false
-           ;:aleph/save-request-message lastmessage
+           :aleph/save-request-message lastmessage
            :as :json-string-keys)
     http/request
     deref
@@ -245,10 +249,27 @@
                          :secret {:secretName "dromon-service-account"}}
                         {:name "dromon-app-cfg", :configMap {:name "dromon-app-cfg"}}]}}}}})
 
-  ;; deploy kuberentes
-  ;;TODO add request body
-  (invoke kubeapi {:op        :patchAppsV1NamespacedDeployment
-                   :namespace "development"})
+  (->
+    @(invoke kubeapi {:op        :patchAppsV1NamespacedDeployment
+                      :name      "dromon"
+                      :namespace "development"
+                      :request
+                      {:body dev-dromon}})
 
- 
+     :body
+    bs/to-string
+    (json/parse-string  true)
+
+    )
+
+;; => {:kind "Status",
+;;     :apiVersion "v1",
+;;     :metadata {},
+;;     :status "Failure",
+;;     :message "415: Unsupported Media Type",
+;;     :reason "UnsupportedMediaType",
+;;     :details {},
+;;     :code 415}
+
   )
+
