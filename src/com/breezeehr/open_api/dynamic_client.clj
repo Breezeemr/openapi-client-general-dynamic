@@ -32,10 +32,16 @@
       path
       path-params)))
 
+(def d (atom nil))
+
+
+;;TODO loop over content-type and produce a function for Patch "application/apply-patch+yaml" & Update "TODO"
+;; content type is in the produces e.g [ "application/json" "application/yaml" "application/vnd.kubernetes.protobuf" "application/json;stream=watch" "application/vnd.kubernetes.protobuf;stream=watch" ]
 (defn make-method [{:keys [baseUrl] :as api-discovery}
                    upper-parameters
-                   {:strs [httpMethod path parameters operationId]
+                   {:strs [httpMethod path parameters operationId produces]
                     :as   method-discovery}]
+  (reset! d {:api-discovery api-discovery :upper-parameters upper-parameters :method-discovery method-discovery})
   ;(prn baseUrl operationId (keys method-discovery) path)
   (let [parameters (into upper-parameters parameters)
         init-map     {:method httpMethod
@@ -78,6 +84,8 @@
                                                                           prn))))
                                                (doto prn)
                                                http/request))}]))
+
+@d
 
 (defn prepare-methods [api-discovery path parameters methods]
   (reduce-kv
@@ -153,6 +161,7 @@
   (keys api-data)
 
   (def kubeapi (dynamic-create-client {} base-url "/openapi/v2"))
+
   (ops kubeapi)
 
   (invoke kubeapi {:op :listCoreV1NamespacedPod
