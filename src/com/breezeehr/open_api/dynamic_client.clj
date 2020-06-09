@@ -68,7 +68,7 @@
       (cond->
         (assoc acc (keyword operationId) {:id          operationId
                                           :description (get method-discovery "description")
-                                          :preform
+                                          :request
                                                        (fn [client op]
                                                          (prn method-discovery)
                                                          (-> init-map
@@ -81,15 +81,13 @@
                                                                request (assoc :body (let [enc-body (:request op)]
                                                                                       (assert enc-body (str "Request cannot be nil for operation " (:op op)))
                                                                                       (doto (cheshire.core/generate-string enc-body)
-                                                                                        prn))))
-                                                             (doto prn)
-                                                             http/request))})
+                                                                                        prn))))))})
         (some #(= % "application/apply-patch+yaml") (get method-discovery "consumes"))
-        (assoc (patch->apply operationId)  (do
+        (assoc (keyword (patch->apply operationId)) (do
                                                    (prn (patch->apply operationId))
                                                    {:id          operationId
                                                    :description (get method-discovery "description")
-                                                   :preform
+                                                   :request
                                                                 (fn [client op]
                                                                   (prn method-discovery)
                                                                   (-> init-map
@@ -102,9 +100,7 @@
                                                                         request (assoc :body (let [enc-body (:request op)]
                                                                                                (assert enc-body (str "Request cannot be nil for operation " (:op op)))
                                                                                                (doto (cheshire.core/generate-string enc-body)
-                                                                                                 prn))))
-                                                                      (doto prn)
-                                                                      http/request))}))))))
+                                                                                                 prn))))))}))))))
 
 (defn prepare-methods [api-discovery path parameters methods]
   (reduce-kv
@@ -158,13 +154,17 @@
     (->> client :ops
          (sort-by key))))
 
-(defn invoke [client {:keys [op] :as operation}]
-  (let [opfn (-> client :ops (get op) :preform)]
+(defn request [client {:keys [op] :as operation}]
+  (let [opfn (-> client :ops (get op) :request)]
     (assert opfn (str op
                       " is not implemented in "
                       (:api client)
                       (:version client)))
     (opfn client operation)))
+
+(defn invoke [client {:keys [op] :as operation}]
+  (let [r (request client operation)]
+    (http/request r)))
 
 (comment
   (def base-url "http://127.0.0.1:8001")
