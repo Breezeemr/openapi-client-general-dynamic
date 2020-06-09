@@ -176,8 +176,23 @@
   (keys api-data)
 
   (def kubeapi (dynamic-create-client {} base-url "/openapi/v2"))
+
   (ops kubeapi)
 
   (invoke kubeapi {:op :listCoreV1NamespacedPod
                    :namespace "production"})
+
+
+  ;; Patch dromon deployment
+
+  ;; *  :patchAppsV1NamespacedDeployment
+  ;; partially update the specified Deployment
+
+
+  ;; deploy kuberentes
+  ;;TODO add request body
+  (invoke kubeapi {:op        :patchAppsV1NamespacedDeployment
+                   :namespace "development"})
+
+ 
   )
