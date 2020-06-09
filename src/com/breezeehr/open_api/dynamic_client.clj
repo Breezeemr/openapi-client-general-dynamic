@@ -82,7 +82,7 @@
                                                                                       (assert enc-body (str "Request cannot be nil for operation " (:op op)))
                                                                                       (doto (cheshire.core/generate-string enc-body)
                                                                                         prn))))))})
-        (some #(= % "application/apply-patch+yaml" "application/apply-patch+json") (get method-discovery "consumes"))
+        (some #(= %  "application/apply-patch+json") (get method-discovery "consumes"))
         (assoc (keyword (patch->apply operationId)) (do
                                                    (prn (patch->apply operationId))
                                                    {:id          operationId
