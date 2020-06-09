@@ -82,7 +82,7 @@
                                                                                       (assert enc-body (str "Request cannot be nil for operation " (:op op)))
                                                                                       (doto (cheshire.core/generate-string enc-body)
                                                                                         prn))))))})
-        (some #(= % "application/apply-patch+yaml") (get method-discovery "consumes"))
+        (some #(= % "application/apply-patch+yaml" "application/apply-patch+json") (get method-discovery "consumes"))
         (assoc (keyword (patch->apply operationId)) (do
                                                    (prn (patch->apply operationId))
                                                    {:id          operationId
@@ -93,14 +93,16 @@
                                                                   (-> init-map
                                                                       (assoc :url (str baseUrl (path-fn op)))
 
-                                                                      (assoc :query-params (key-sel-fn op)
-                                                                             :aleph/save-request-message lastmessage
-                                                                             :throw-exceptions false)
+                                                                      (assoc
+                                                                        :query-params (key-sel-fn op)
+                                                                        :content-type "application/apply-patch+json"
+                                                                        :aleph/save-request-message lastmessage
+                                                                        :throw-exceptions false)
                                                                       (cond->
-                                                                        request (assoc :body (let [enc-body (:request op)]
-                                                                                               (assert enc-body (str "Request cannot be nil for operation " (:op op)))
-                                                                                               (doto (cheshire.core/generate-string enc-body)
-                                                                                                 prn))))))}))))))
+                                                                          request (assoc :body (let [enc-body (:request op)]
+                                                                                                 (assert enc-body (str "Request cannot be nil for operation " (:op op)))
+                                                                                                 (doto (cheshire.core/generate-string enc-body)
+                                                                                                   prn))))))}))))))
 
 (defn prepare-methods [api-discovery path parameters methods]
   (reduce-kv
