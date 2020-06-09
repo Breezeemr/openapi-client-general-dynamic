@@ -71,12 +71,12 @@
                                           :description (get method-discovery "description")
                                           :request
                                                        (fn [client op]
-                                                         (prn method-discovery)
+                                                         ;;(prn method-discovery)
                                                          (-> init-map
                                                              (assoc :url (str baseUrl (path-fn op)))
 
                                                              (assoc :query-params (key-sel-fn op)
-                                                                    :aleph/save-request-message lastmessage
+                                                               :save-request? true
                                                                     :throw-exceptions false)
                                                              (cond->
                                                                request (assoc :body (let [enc-body (:request op)]
@@ -97,7 +97,7 @@
                                                                       (assoc
                                                                         :query-params (key-sel-fn op)
                                                                         :content-type "application/apply-patch+yaml"
-                                                                        :aleph/save-request-message lastmessage
+                                                                        :save-request? true
                                                                         :throw-exceptions false)
                                                                       (cond->
                                                                           request (assoc :body (let [enc-body (:request op)]
@@ -130,7 +130,6 @@
     {:method :get
      :url    (str base-url path)}
     (assoc :throw-exceptions false
-           :aleph/save-request-message lastmessage
            :save-request? true
            :as :json-string-keys)
     http/request
