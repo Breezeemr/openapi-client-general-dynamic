@@ -269,5 +269,33 @@
 ;;     :details {},
 ;;     :code 415}
 
+  (->
+    @(invoke kubeapi {:op        :applyAppsV1NamespacedDeployment
+                      :name      "dromon"
+                      :namespace "development"
+                      :request
+                      {:body dev-dromon}})
+
+    :body
+    bs/to-string
+    (json/parse-string  true)
+
+    )
+;; => {:kind "Status",
+;;     :apiVersion "v1",
+;;     :metadata {},
+;;     :status "Failure",
+;;     :message
+;;     "PatchOptions.meta.k8s.io \"\" is invalid: fieldManager: Required value: is required for apply patch",
+;;     :reason "Invalid",
+;;     :details
+;;     {:group "meta.k8s.io",
+;;      :kind "PatchOptions",
+;;      :causes
+;;      [{:reason "FieldValueRequired",
+;;        :message "Required value: is required for apply patch",
+;;        :field "fieldManager"}]},
+;;     :code 422}
+
   )
 
