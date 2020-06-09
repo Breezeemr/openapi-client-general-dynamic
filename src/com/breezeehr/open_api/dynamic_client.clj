@@ -20,7 +20,6 @@
 
 (def lastmessage (atom nil))
 
-
 (defn make-path-fn [path path-params id]
   (fn [vals]
     (reduce-kv
@@ -126,14 +125,13 @@
 (defn init-client [config]
   config)
 
-(def lastmessage (atom nil) )
-
 (defn get-openapi-spec [client base-url path]
   (->
     {:method :get
      :url    (str base-url path)}
     (assoc :throw-exceptions false
            :aleph/save-request-message lastmessage
+           :save-request? true
            :as :json-string-keys)
     http/request
     deref
