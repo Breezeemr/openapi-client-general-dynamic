@@ -189,71 +189,70 @@
   ;; *  :patchAppsV1NamespacedDeployment
   ;; partially update the specified Deployment
 
-  (def dev-dromon {:namespace "development",
-                   :request
-                   {:apiVersion "apps/v1",
-                    :kind       "Deployment",
-                    :metadata   {:name "dromon", :labels {:app "dromon", :name "dromon"}},
-                    :spec
-                    {:replicas    1,
-                     :serviceName "dromon",
-                     :selector    {:matchLabels {:app "dromon"}},
-                     :template
-                     {:metadata {:labels {:app "dromon", :name "dromon"}},
-                      :spec
-                      {:containers
-                       [{:volumeMounts
-                         [{:name "dromon-service-config", :mountPath "/app/conf"}
-                          {:name "datomic-creds", :mountPath "/app/creds"}
-                          {:name "breezeehr-cert", :mountPath "/app/certs"}
-                          {:name "dromon-service-account", :mountPath "/app/service-account"}
-                          {:name "dromon-app-cfg", :mountPath "app/resources"}],
-                         :readinessProbe
-                         {:httpGet             {:port 8443, :scheme "HTTPS", :path "/health"},
-                          :initialDelaySeconds 35,
-                          :periodSeconds       5},
-                         :name            "dromon",
-                         :env
-                         [{:name "JAVA_TOOL_OPTIONS",
-                           :value
-                           "-Xmx4G -Xms4G -XX:+UseG1GC -XX:MaxGCPauseMillis=200 -XX:+UseStringDeduplication -XX:+AlwaysPreTouch -Djava.awt.headless=true -XX:ActiveProcessorCount=4"}
-                          {:name "BASE_URL", :value "https://localhost:8443"}
-                          {:name "SERVER_PORT", :value "8443"}
-                          {:name "SSL", :value "true"}
-                          {:name "DATABASE_URI",
-                           :valueFrom
-                           {:secretKeyRef {:name "dromon-env-config", :key "phi-fhir-test"}}}
-                          {:name  "OPENID_PROVIDER_URL",
-                           :value "https://auth-dev.breezeehr.com/auth/realms/patient-portal"}
-                          {:name "AUTHORIZATION", :value "true"}
-                          {:name "CORS_ALLOWED_ORIGINS", :value "https://portal.breezeehr.com"}],
-                         :ports           [{:containerPort 8443, :name "https"}],
-                         :livenessProbe
-                         {:httpGet             {:port 8443, :scheme "HTTPS", :path "/health"},
-                          :initialDelaySeconds 120,
-                          :periodSeconds       20},
-                         :imagePullPolicy "Always",
-                         :image
-                         "gcr.io/breezeehr.com/breeze-ehr/dromon:DROMNG-98257bc6b9b42851f10c5388f5bca8755599e363",
-                         :resources
-                         {:limits   {:memory "6Gi", :cpu "4"},
-                          :requests {:cpu "1", :memory "5Gi"}}}],
-                       :volumes
-                       [{:name "datomic-creds", :secret {:secretName "datomic-mysql-creds"}}
-                        {:name "dromon-service-config", :secret {:secretName "service-config"}}
-                        {:name "breezeehr-cert", :secret {:secretName "breezeehr-cert"}}
-                        {:name   "dromon-service-account",
-                         :secret {:secretName "dromon-service-account"}}
-                        {:name "dromon-app-cfg", :configMap {:name "dromon-app-cfg"}}]}}}}})
+  (def dev-dromon {:apiVersion "apps/v1",
+                   :kind       "Deployment",
+                   :metadata   {:name "dromon", :labels {:app "dromon", :name "dromon"}},
+                   :spec
+                               {:replicas    1,
+                                ;:serviceName "dromon",
+                                :selector    {:matchLabels {:app "dromon"}},
+                                :template
+                                             {:metadata {:labels {:app "dromon", :name "dromon"}},
+                                              :spec
+                                                        {:containers
+                                                         [{:volumeMounts
+                                                                            [{:name "dromon-service-config", :mountPath "/app/conf"}
+                                                                             {:name "datomic-creds", :mountPath "/app/creds"}
+                                                                             {:name "breezeehr-cert", :mountPath "/app/certs"}
+                                                                             {:name "dromon-service-account", :mountPath "/app/service-account"}
+                                                                             {:name "dromon-app-cfg", :mountPath "app/resources"}],
+                                                           :readinessProbe
+                                                                            {:httpGet             {:port 8443, :scheme "HTTPS", :path "/health"},
+                                                                             :initialDelaySeconds 35,
+                                                                             :periodSeconds       5},
+                                                           :name            "dromon",
+                                                           :env
+                                                                            [{:name "JAVA_TOOL_OPTIONS",
+                                                                              :value
+                                                                                    "-Xmx4G -Xms4G -XX:+UseG1GC -XX:MaxGCPauseMillis=200 -XX:+UseStringDeduplication -XX:+AlwaysPreTouch -Djava.awt.headless=true -XX:ActiveProcessorCount=4"}
+                                                                             {:name "BASE_URL", :value "https://localhost:8443"}
+                                                                             {:name "SERVER_PORT", :value "8443"}
+                                                                             {:name "SSL", :value "true"}
+                                                                             {:name "DATABASE_URI",
+                                                                              :valueFrom
+                                                                                    {:secretKeyRef {:name "dromon-env-config", :key "phi-fhir-test"}}}
+                                                                             {:name  "OPENID_PROVIDER_URL",
+                                                                              :value "https://auth-dev.breezeehr.com/auth/realms/patient-portal"}
+                                                                             {:name "AUTHORIZATION", :value "true"}
+                                                                             {:name "CORS_ALLOWED_ORIGINS", :value "https://portal.breezeehr.com"}],
+                                                           :ports           [{:containerPort 8443, :name "https"
+                                                                              :protocol     "TCP"}],
+                                                           :livenessProbe
+                                                                            {:httpGet             {:port 8443, :scheme "HTTPS", :path "/health"},
+                                                                             :initialDelaySeconds 120,
+                                                                             :periodSeconds       20},
+                                                           :imagePullPolicy "Always",
+                                                           :image
+                                                                            "gcr.io/breezeehr.com/breeze-ehr/dromon:DROMNG-98257bc6b9b42851f10c5388f5bca8755599e363",
+                                                           :resources
+                                                                            {:limits   {:memory "6Gi", :cpu "4"},
+                                                                             :requests {:cpu "1", :memory "5Gi"}}}],
+                                                         :volumes
+                                                         [{:name "datomic-creds", :secret {:secretName "datomic-mysql-creds"}}
+                                                          {:name "dromon-service-config", :secret {:secretName "service-config"}}
+                                                          {:name "breezeehr-cert", :secret {:secretName "breezeehr-cert"}}
+                                                          {:name   "dromon-service-account",
+                                                           :secret {:secretName "dromon-service-account"}}
+                                                          {:name "dromon-app-cfg", :configMap {:name "dromon-app-cfg"}}]}}}})
 
   (->
-    @(invoke kubeapi {:op        :patchAppsV1NamespacedDeployment
+    @(invoke kubeapi {:op        :applyAppsV1NamespacedDeployment
                       :name      "dromon"
                       :namespace "development"
-                      :request
-                      {:body dev-dromon}})
+                      :fieldManager "testmanager"
+                      :request dev-dromon})
 
-     :body
+       :body
     bs/to-string
     (json/parse-string  true)
 
