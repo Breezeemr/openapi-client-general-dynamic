@@ -1,5 +1,7 @@
 (ns com.breezeehr.open-api.dynamic-client-v2
-  (:require [com.breezeehr.open-api.dynamic-client :as dc]))
+  (:require [com.breezeehr.open-api.dynamic-client :as dc]
+            [aleph.http :as http]
+            ))
 
 (defn create-client
   [{:keys [base-url version]}]
