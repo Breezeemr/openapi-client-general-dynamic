@@ -197,7 +197,7 @@
                                 ;:serviceName "dromon",
                                 :selector    {:matchLabels {:app "dromon"}},
                                 :template
-                                             {:metadata {:labels {:app "dromon", :name "dromon"}},
+                                             {:metadata {:labels {:app "dromon", :name "dromon" :newly-added "label"}},
                                               :spec
                                                         {:containers
                                                          [{:volumeMounts
@@ -252,9 +252,9 @@
                       :fieldManager "testmanager"
                       :request dev-dromon})
 
-       :body
-    bs/to-string
-    (json/parse-string  true)
+    ;   :body
+    ;bs/to-string
+    ;(json/parse-string  true)
 
     )
 
