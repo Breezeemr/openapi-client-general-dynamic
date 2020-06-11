@@ -18,106 +18,132 @@
     persistent!
     (with-meta (meta map))))
 
-(def lastmessage (atom nil))
 
-(defn make-path-fn [path path-params id]
-  (fn [vals]
-    (reduce-kv
-      (fn [acc parameter v]
-        (let [nv (get vals parameter)]
-          (assert nv (str "your input " (pr-str vals) " must contains key " parameter " for " id " path."))
-          (clojure.string/replace
-            acc
-            (str "{" (name parameter) "}")
-            nv)))
-      path
-      path-params)))
+(defn make-path-fn [{:strs [parameters path operationId]
+                     :as   method-discovery}]
+  (let [path-params  (into {}
+                           (comp
+                             (filter (comp #(= % "path") #(get % "in")))
+                             (map #(get % "name"))
+                             (map (juxt keyword #(str "{" % "}"))))
+                           parameters)]
+    (fn [vals]
+      (reduce-kv
+        (fn [acc parameter-key match]
+          (let [nv (get vals parameter-key)]
+            (assert nv (str "your input " (pr-str vals) " must contains key " parameter-key " for " operationId " path."))
+            (clojure.string/replace
+              acc
+              match
+              nv)))
+        path
+        path-params))))
+
+(defn make-key-sel-fn [{:strs [parameters path operationId]
+                        :as   method-discovery}]
+  (let [query-ks     (into []
+                           (comp
+                             (filter (comp #(= % "query") #(get % "in")))
+                             (map (comp keyword #(get % "name"))))
+                           parameters)]
+    (fn [m]
+      (fast-select-keys m query-ks))))
 
 (defn patch->apply [operation]
-  (str/replace-first operation #"^patch" "apply")
+  (str/replace-first operation #"^patch" "apply"))
+
+(defn operation-indexer [acc {:strs [operationId]} data]
+  (assoc acc (keyword operationId) data))
+
+(defn kube-kind-indexer [acc {{:strs [group version kind] :as blah}
+                              "x-kubernetes-group-version-kind"} data]
+  (assert blah )
+  (assoc-in acc [kind (str group "/" version)] data))
+
+(defn default-request-fn [{:strs [baseUrl parameters httpMethod operationId] :as method-discovery}]
+  (let [init-map     {:method httpMethod
+                      :as     :json}
+        path-fn      (make-path-fn method-discovery)
+        key-sel-fn (make-key-sel-fn method-discovery)
+        body-params  (into []
+                           (comp
+                             (filter (comp #(= % "body") #(get % "in"))))
+                           parameters)
+        request      (first body-params)]
+    {:id          operationId
+     :description (get method-discovery "description")
+     :request (fn [client op]
+                ;;(prn method-discovery)
+                (-> init-map
+                    (assoc :url (str baseUrl (path-fn op)))
+
+                    (assoc :query-params (key-sel-fn op)
+                           :save-request? true
+                           :throw-exceptions false)
+                    (cond->
+                      request (assoc :body (let [enc-body (:request op)]
+                                             (assert enc-body (str "Request cannot be nil for operation " (:op op)))
+                                             (doto (cheshire.core/generate-string enc-body)
+                                               prn))))))})
+  )
+
+(defn apply-request-fn [{:strs [baseUrl parameters httpMethod operationId] :as method-discovery}]
+  (when (some #(= % "application/apply-patch+yaml") (get method-discovery "consumes"))
+    (let [init-map    {:method httpMethod
+                       :as     :json}
+          path-fn     (make-path-fn method-discovery)
+          key-sel-fn  (make-key-sel-fn method-discovery)
+          body-params (into []
+                            (comp
+                              (filter (comp #(= % "body") #(get % "in"))))
+                            parameters)
+          request     (first body-params)]
+      {:id          (patch->apply operationId)
+       :description (get method-discovery "description")
+       :request     (fn [client op]
+                      ;;(prn method-discovery)
+                      (-> init-map
+                          (assoc :url (str baseUrl (path-fn op)))
+
+                          (assoc :query-params (key-sel-fn op)
+                                 :save-request? true
+                                 :content-type "application/apply-patch+yaml"
+                                 :throw-exceptions false)
+                          (cond->
+                            request (assoc :body (let [enc-body (:request op)]
+                                                   (assert enc-body (str "Request cannot be nil for operation " (:op op)))
+                                                   (doto (cheshire.core/generate-string enc-body)
+                                                     prn))))))}))
   )
 
 (defn make-method [{:keys [baseUrl] :as api-discovery}
                    upper-parameters
-                   path]
-  ;(prn baseUrl operationId (keys method-discovery) path)
-  (fn [acc httpMethod {:strs [parameters operationId]
-                       :as   method-discovery}]
-    (let [parameters   (into upper-parameters parameters)
-          init-map     {:method httpMethod
-                        :as     :json}
-          path-params  (into {}
-                             (comp
-                               (filter (comp #(= % "path") #(get % "in")))
-                               (map (juxt (comp keyword #(get % "name")) identity)))
-                             parameters)
-          path-fn      (make-path-fn path path-params operationId)
-          query-params (into {}
-                             (comp
-                               (filter (comp #(= % "query") #(get % "in")))
-                               (map (juxt (comp keyword #(get % "name")) identity)))
-                             parameters)
-          body-params  (into []
-                             (comp
-                               (filter (comp #(= % "body") #(get % "in"))))
-                             parameters)
-          request      (first body-params)
-          query-ks     (into [] (map key) query-params)
-          key-sel-fn   (fn [m]
-                         (fast-select-keys m query-ks))]
-      ;(prn (keys method-discovery))
-      (cond->
-        (assoc acc (keyword operationId) {:id          operationId
-                                          :description (get method-discovery "description")
-                                          :request
-                                                       (fn [client op]
-                                                         ;;(prn method-discovery)
-                                                         (-> init-map
-                                                             (assoc :url (str baseUrl (path-fn op)))
+                   path
+                   {:keys [make-request-fn indexer]}]
+  (fn [acc httpMethod method-discovery]
+    (let [method-discovery (-> method-discovery
+                               (update  "parameters" into upper-parameters)
+                               (assoc "path" path
+                                      "baseUrl" baseUrl
+                                      "httpMethod" httpMethod))]
+      (if-some [req-fn (make-request-fn method-discovery)]
+        (indexer acc method-discovery req-fn)
+        acc))))
 
-                                                             (assoc :query-params (key-sel-fn op)
-                                                               :save-request? true
-                                                                    :throw-exceptions false)
-                                                             (cond->
-                                                               request (assoc :body (let [enc-body (:request op)]
-                                                                                      (assert enc-body (str "Request cannot be nil for operation " (:op op)))
-                                                                                      (doto (cheshire.core/generate-string enc-body)
-                                                                                        prn))))))})
-        (some #(= %  "application/apply-patch+yaml") (get method-discovery "consumes"))
-        (assoc (keyword (patch->apply operationId)) (do
-                                                   (prn (patch->apply operationId))
-                                                   {:id          operationId
-                                                   :description (get method-discovery "description")
-                                                   :request
-                                                                (fn [client op]
-                                                                  (prn method-discovery)
-                                                                  (-> init-map
-                                                                      (assoc :url (str baseUrl (path-fn op)))
-
-                                                                      (assoc
-                                                                        :query-params (key-sel-fn op)
-                                                                        :content-type "application/apply-patch+yaml"
-                                                                        :save-request? true
-                                                                        :throw-exceptions false)
-                                                                      (cond->
-                                                                          request (assoc :body (let [enc-body (:request op)]
-                                                                                                 (assert enc-body (str "Request cannot be nil for operation " (:op op)))
-                                                                                                 (doto (cheshire.core/generate-string enc-body)
-                                                                                                   prn))))))}))))))
-
-(defn prepare-methods [api-discovery path parameters methods]
+(defn prepare-methods [api-discovery path parameters method-generator methods]
   (reduce-kv
-    (make-method api-discovery parameters path)
+    (make-method api-discovery parameters path method-generator)
     {}
     methods))
 
-(defn prepare-paths [api-discovery paths]
+(defn prepare-paths [api-discovery method-generator paths]
   (reduce-kv
     (fn [acc path {:strs [parameters] :as premethod}]
       (into acc (prepare-methods
                   api-discovery
                   path
                   parameters
+                  method-generator
                   (dissoc premethod "parameters"))))
     {}
     paths))
@@ -137,16 +163,31 @@
     :body
     (assoc :baseUrl base-url)))
 
+
+(def default-method-generator {:index :ops
+                               :indexer operation-indexer
+                               :make-request-fn default-request-fn})
+
 (defn dynamic-create-client
   ([config base-uri path]
    (let [client (init-client config)
          api-discovery
-                (get-openapi-spec client base-uri path)]
-     (assoc client
-       ;:api api
-       :ops (prepare-paths
-              api-discovery
-              (get api-discovery "paths"))))))
+                (get-openapi-spec client base-uri path)
+         method-generators (get config :method-generators
+                                [default-method-generator])]
+     (reduce
+       (fn [acc method-generator]
+         (assoc acc
+           (:index method-generator)
+
+           (prepare-paths
+                  api-discovery
+                  method-generator
+                  (get api-discovery "paths")))
+         )
+       client
+       method-generators)
+     )))
 
 (defn ops [client]
   (run!
@@ -169,6 +210,20 @@
   (let [r (request client operation)]
     (http/request r)))
 
+
+(defn kube-apply-request [client operation]
+  (let [{:keys [kind apiVersion]} (:request operation)
+        opfn (-> client :apply (get kind) (get apiVersion) :request)]
+    (assert opfn (str kind apiVersion
+                      " is not implemented in "
+                      (:api client)
+                      (:version client)))
+    (opfn client operation)))
+
+(defn kube-apply [client operation]
+  (let [r (kube-apply-request client operation)]
+    (http/request r)))
+
 (comment
   (def base-url "http://127.0.0.1:8001")
 
@@ -176,7 +231,12 @@
 
   (keys api-data)
 
-  (def kubeapi (dynamic-create-client {} base-url "/openapi/v2"))
+  (def kubeapi (dynamic-create-client {:method-generators
+                                       [default-method-generator
+                                        {:index :apply
+                                         :indexer kube-kind-indexer
+                                         :make-request-fn apply-request-fn}
+                                        ]} base-url "/openapi/v2"))
 
   (ops kubeapi)
 
@@ -246,7 +306,7 @@
                                                           {:name "dromon-app-cfg", :configMap {:name "dromon-app-cfg"}}]}}}})
 
   (->
-    @(invoke kubeapi {:op        :applyAppsV1NamespacedDeployment
+    @(kube-apply kubeapi {                                  ;:op        :applyAppsV1NamespacedDeployment
                       :name      "dromon"
                       :namespace "development"
                       :fieldManager "testmanager"
@@ -268,8 +328,7 @@
 ;;     :code 415}
 
   (->
-    @(invoke kubeapi {:op        :applyAppsV1NamespacedDeployment
-                      :name      "dromon"
+    @(kube-apply kubeapi {:name      "dromon"
                       :namespace "development"
                       :request
                       {:body dev-dromon}})
