@@ -55,10 +55,12 @@
 (defn operation-indexer [acc {:strs [operationId]} data]
   (assoc acc (keyword operationId) data))
 
-(defn kube-kind-indexer [acc {{:strs [group version kind] :as blah}
+(defn kube-kind-indexer [acc {{:strs [group version kind] :as gvc}
                               "x-kubernetes-group-version-kind"} data]
-  (assert blah )
-  (assoc-in acc [kind (str group "/" version)] data))
+
+  (if gvc
+    (assoc-in acc [kind (str group "/" version)] data)
+    acc))
 
 (defn default-request-fn [{:strs [baseUrl parameters httpMethod operationId] :as method-discovery}]
   (let [init-map     {:method httpMethod
