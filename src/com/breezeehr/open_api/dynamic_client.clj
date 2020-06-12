@@ -59,7 +59,9 @@
                               "x-kubernetes-group-version-kind"} data]
 
   (if gvc
-    (assoc-in acc [kind (str group "/" version)] data)
+    (assoc-in acc [kind (if (and group (not (empty? group)))
+                          (str group "/" version)
+                          version)] data)
     acc))
 
 (defn default-request-fn [{:strs [baseUrl parameters httpMethod operationId] :as method-discovery}]
