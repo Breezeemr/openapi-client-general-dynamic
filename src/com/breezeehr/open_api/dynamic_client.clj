@@ -64,6 +64,19 @@
                           version)] data)
     acc))
 
+(defn kube-kind-method-indexer [acc {{:strs [group version kind]
+                                      :as   gvc}
+                                     "x-kubernetes-group-version-kind"
+                                     httpMethod "httpMethod"
+                                     :as method-data} data]
+
+  (if gvc
+    (assoc-in acc [kind (if (and group (not (empty? group)))
+                          (str group "/" version)
+                          version) httpMethod] data)
+    (do                                                     ;(prn method-data)
+      acc)))
+
 (defn default-request-fn [{:strs [baseUrl parameters httpMethod operationId] :as method-discovery}]
   (let [init-map     {:method httpMethod
                       :as     :json}
@@ -130,25 +143,27 @@
                                (assoc "path" path
                                       "baseUrl" baseUrl
                                       "httpMethod" httpMethod))]
+      (prn (keys method-discovery))
       (if-some [req-fn (make-request-fn method-discovery)]
         (indexer acc method-discovery req-fn)
         acc))))
 
-(defn prepare-methods [api-discovery path parameters method-generator methods]
+(defn prepare-methods [acc api-discovery path parameters method-generator methods]
   (reduce-kv
     (make-method api-discovery parameters path method-generator)
-    {}
+    acc
     methods))
 
 (defn prepare-paths [api-discovery method-generator paths]
   (reduce-kv
     (fn [acc path {:strs [parameters] :as premethod}]
-      (into acc (prepare-methods
-                  api-discovery
-                  path
-                  parameters
-                  method-generator
-                  (dissoc premethod "parameters"))))
+      (prepare-methods
+        acc
+        api-discovery
+        path
+        parameters
+        method-generator
+        (dissoc premethod "parameters")))
     {}
     paths))
 
@@ -228,6 +243,19 @@
   (let [r (kube-apply-request client operation)]
     (http/request r)))
 
+(defn kube-request [client method operation]
+  (let [{:keys [kind apiVersion]} (:request operation)
+        opfn (-> client :http-method (get kind) (get apiVersion) (get method) :request)]
+    (assert opfn (str kind " " apiVersion " " method
+                      " is not implemented in "
+                      (:api client)
+                      (:version client)))
+    (opfn client operation)))
+
+(defn kube [client method operation]
+  (let [r (kube-request client method operation)]
+    (http/request r)))
+
 (comment
   (def base-url "http://127.0.0.1:8001")
 
@@ -240,7 +268,10 @@
                                         {:index :apply
                                          :indexer kube-kind-indexer
                                          :make-request-fn apply-request-fn}
-                                        ]} base-url "/openapi/v2"))
+                                        {:index :http-method
+                                         :indexer kube-kind-method-indexer
+                                         :make-request-fn default-request-fn}]}
+                                      base-url "/openapi/v2"))
 
   (ops kubeapi)
 
@@ -315,6 +346,18 @@
                       :namespace "development"
                       :fieldManager "testmanager"
                       :request dev-dromon})
+
+    ;   :body
+    ;bs/to-string
+    ;(json/parse-string  true)
+
+    )
+  (->
+    @(kube kubeapi "post" {                                  ;:op        :applyAppsV1NamespacedDeployment
+                          :name      "dromon"
+                          :namespace "development"
+                          :fieldManager "testmanager"
+                          :request dev-dromon})
 
     ;   :body
     ;bs/to-string
