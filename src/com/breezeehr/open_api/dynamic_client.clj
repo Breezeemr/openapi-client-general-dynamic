@@ -55,27 +55,42 @@
 (defn operation-indexer [acc {:strs [operationId]} data]
   (assoc acc (keyword operationId) data))
 
-(defn kube-kind-indexer [acc {{:strs [group version kind] :as gvc}
-                              "x-kubernetes-group-version-kind"} data]
+(def after-name #"(.*)\{name\}(.*)")
 
-  (if gvc
-    (assoc-in acc [kind (if (and group (not (empty? group)))
-                          (str group "/" version)
-                          version)] data)
-    acc))
+(defn kube-kind-indexer [acc {{:strs [group version kind] :as gvc}
+                              "x-kubernetes-group-version-kind"
+                              path "path"} data]
+  (let [sub (not-empty (first (drop 2 (re-matches after-name path))))
+        there (get-in acc [kind (if (and group (not (empty? group)))
+                                (str group "/" version)
+                                version)
+                           sub])]
+    (assert (not there) (pr-str path))
+    (if (and gvc (not sub))
+      (assoc-in acc [kind (if (and group (not (empty? group)))
+                            (str group "/" version)
+                            version)
+                     sub] data)
+      acc)))
 
 (defn kube-kind-method-indexer [acc {{:strs [group version kind]
                                       :as   gvc}
                                      "x-kubernetes-group-version-kind"
+                                     path "path"
                                      httpMethod "httpMethod"
                                      :as method-data} data]
-
-  (if gvc
-    (assoc-in acc [kind (if (and group (not (empty? group)))
-                          (str group "/" version)
-                          version) httpMethod] data)
-    (do                                                     ;(prn method-data)
-      acc)))
+  (let [sub   (not-empty (first (drop 2 (re-matches after-name path))))
+        there (get-in acc [kind (if (and group (not (empty? group)))
+                                  (str group "/" version)
+                                  version)
+                           sub])]
+    (assert (not there) (pr-str path))
+    (if (and gvc (not sub))
+      (assoc-in acc [kind (if (and group (not (empty? group)))
+                            (str group "/" version)
+                            version) httpMethod] data)
+      (do                                                   ;(prn method-data)
+        acc))))
 
 (defn default-request-fn [{:strs [baseUrl parameters httpMethod operationId] :as method-discovery}]
   (let [init-map     {:method httpMethod
@@ -143,7 +158,6 @@
                                (assoc "path" path
                                       "baseUrl" baseUrl
                                       "httpMethod" httpMethod))]
-      (prn (keys method-discovery))
       (if-some [req-fn (make-request-fn method-discovery)]
         (indexer acc method-discovery req-fn)
         acc))))
@@ -231,8 +245,8 @@
 
 
 (defn kube-apply-request [client operation]
-  (let [{:keys [kind apiVersion]} (:request operation)
-        opfn (-> client :apply (get kind) (get apiVersion) :request)]
+  (let [{:keys [kind apiVersion sub]} (:request operation)
+        opfn (-> client :apply (get kind) (get apiVersion) (get sub) :request)]
     (assert opfn (str kind apiVersion
                       " is not implemented in "
                       (:api client)
@@ -352,11 +366,12 @@
     ;(json/parse-string  true)
 
     )
+
   (->
     @(kube kubeapi "post" {                                  ;:op        :applyAppsV1NamespacedDeployment
                           :name      "dromon"
                           :namespace "development"
-                          :fieldManager "testmanager"
+                           ;:fieldManager "testmanager"
                           :request dev-dromon})
 
     ;   :body
