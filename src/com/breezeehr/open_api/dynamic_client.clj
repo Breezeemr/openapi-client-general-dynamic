@@ -244,17 +244,19 @@
     (http/request r)))
 
 
-(defn kube-apply-request [client operation]
+(defn kube-apply-request [client operation token]
   (let [{:keys [kind apiVersion sub]} (:request operation)
         opfn (-> client :apply (get kind) (get apiVersion) (get sub) :request)]
     (assert opfn (str kind apiVersion
                       " is not implemented in "
                       (:api client)
                       (:version client)))
-    (opfn client operation)))
+    (-> client
+        (opfn operation)
+        (assoc-in [:headers :authorization] (str "Bearer " token)))))
 
-(defn kube-apply [client operation]
-  (let [r (kube-apply-request client operation)]
+(defn kube-apply [client operation token]
+  (let [r (kube-apply-request client operation token)]
     (http/request r)))
 
 (defn kube-request [client method operation]
@@ -291,5 +293,33 @@
 
   (invoke kubeapi {:op :listCoreV1NamespacedPod
                    :namespace "production"})
+
+
+  (def dromon-service
+    {:apiVersion "v1",
+     :kind       "Service",
+     :metadata   {:name "dromon", :labels {:name "dromon", :app "dromon"}},
+     :spec
+     {:type     "NodePort",
+      :ports    [{:name "dromon", :port 443, :protocol "TCP", :targetPort 8443}],
+      :selector {:app "dromon", :name "dromon"}}})
+
+  (kube-apply-request
+   kubeapi
+   {:name         "dromon"
+    :namespace    "development"
+    :fieldManager "testmanager"
+    :request      dromon-service}
+   "token" )
+;; => {:method "patch",
+;;     :as :json,
+;;     :save-request? true,
+;;     :headers {:authorization "Bearer token"},
+;;     :url "http://127.0.0.1:8001/api/v1/namespaces/development/services/dromon",
+;;     :query-params {:fieldManager "testmanager"},
+;;     :content-type "application/apply-patch+yaml",
+;;     :throw-exceptions false,
+;;     :body
+;;     "{\"apiVersion\":\"v1\",\"kind\":\"Service\",\"metadata\":{\"name\":\"dromon\",\"labels\":{\"name\":\"dromon\",\"app\":\"dromon\"}},\"spec\":{\"type\":\"NodePort\",\"ports\":[{\"name\":\"dromon\",\"port\":443,\"protocol\":\"TCP\",\"targetPort\":8443}],\"selector\":{\"app\":\"dromon\",\"name\":\"dromon\"}}}"}
   )
 
