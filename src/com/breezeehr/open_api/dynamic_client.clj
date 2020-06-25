@@ -145,8 +145,7 @@
                               request (assoc :body (let [enc-body (:request op)]
                                                      (assert enc-body (str "Request cannot be nil for operation " (:op op)))
                                                      (doto (cheshire.core/generate-string enc-body)
-                                                       prn))))))}))
-  )
+                                                       prn))))))})))
 
 (defn make-method [{:keys [baseUrl] :as api-discovery}
                    upper-parameters
