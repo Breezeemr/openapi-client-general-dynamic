@@ -119,7 +119,7 @@
                                                prn))))))})
   )
 
-(defn apply-request-fn [{:strs [baseUrl parameters httpMethod operationId token] :as method-discovery}]
+(defn apply-request-fn [{:strs [baseUrl parameters httpMethod operationId opts] :as method-discovery}]
   (when (some #(= % "application/apply-patch+yaml") (get method-discovery "consumes"))
     (let [init-map    {:method httpMethod
                        :as     :json}
@@ -129,7 +129,8 @@
                             (comp
                               (filter (comp #(= % "body") #(get % "in"))))
                             parameters)
-          request     (first body-params)]
+          request     (first body-params)
+          get-token-fn (:get-token-fn opts)]
       {:id          (patch->apply operationId)
        :description (get method-discovery "description")
        :request     (fn [client op]
@@ -141,7 +142,7 @@
                                  :content-type "application/apply-patch+yaml"
                                  :throw-exceptions false)
                           (cond->
-                              token (assoc-in [:headers :authorization] (str "Bearer " token))
+                              get-token-fn (assoc-in [:headers :authorization] (str "Bearer " (get-token-fn)))
                               request (assoc :body (let [enc-body (:request op)]
                                                      (assert enc-body (str "Request cannot be nil for operation " (:op op)))
                                                      (doto (cheshire.core/generate-string enc-body)
@@ -151,13 +152,14 @@
                    upper-parameters
                    path
                    {:keys [make-request-fn indexer ]}
-                   {:keys [token]}]
+                   opts
+                   ]
   (fn [acc httpMethod method-discovery]
     (let [method-discovery (-> method-discovery
                                (update  "parameters" into upper-parameters)
                                ;;TODO will need to be added conditionally
                                (assoc "path" path
-                                      "token" token
+                                      "opts" opts
                                       "baseUrl" baseUrl
                                       "httpMethod" httpMethod))]
       (if-some [req-fn (make-request-fn method-discovery)]
@@ -205,7 +207,7 @@
                                :make-request-fn default-request-fn})
 
 (defn dynamic-create-client
-  ([config base-uri path {:keys [token] :as opt}]
+  ([config base-uri path opt]
    (let [client (init-client config)
          api-discovery
                 (get-openapi-spec client base-uri path)
@@ -285,23 +287,6 @@
   (keys api-data)
   api-data
 
-
-  (def kubeapi (dynamic-create-client {:method-generators
-                                       [default-method-generator
-                                        {:index :apply
-                                         :indexer kube-kind-indexer
-                                         :make-request-fn apply-request-fn}
-                                        {:index :http-method
-                                         :indexer kube-kind-method-indexer
-                                         :make-request-fn default-request-fn}]}
-                                      base-url "/openapi/v2" {:token "client token"}))
-
-  (ops kubeapi)
-
-  (invoke kubeapi {:op :listCoreV1NamespacedPod
-                   :namespace "production"})
-
-
   (def dromon-service
     {:apiVersion "v1",
      :kind       "Service",
@@ -311,34 +296,6 @@
       :ports    [{:name "dromon", :port 443, :protocol "TCP", :targetPort 8443}],
       :selector {:app "dromon", :name "dromon"}}})
 
-  (kube-apply-request
-   kubeapi
-   {:name         "dromon"
-    :namespace    "development"
-    :fieldManager "testmanager"
-    :request      dromon-service}
-   "token" )
-
-;; => {:method "patch",
-;;     :as :json,
-;;     :save-request? true,
-;;     :headers {:authorization "Bearer token"},
-;;     :url "http://127.0.0.1:8001/api/v1/namespaces/development/services/dromon",
-;;     :query-params {:fieldManager "testmanager"},
-;;     :content-type "application/apply-patch+yaml",
-;;     :throw-exceptions false,
-;;     :body
-;;     "{\"apiVersion\":\"v1\",\"kind\":\"Service\",\"metadata\":{\"name\":\"dromon\",\"labels\":{\"name\":\"dromon\",\"app\":\"dromon\"}},\"spec\":{\"type\":\"NodePort\",\"ports\":[{\"name\":\"dromon\",\"port\":443,\"protocol\":\"TCP\",\"targetPort\":8443}],\"selector\":{\"app\":\"dromon\",\"name\":\"dromon\"}}}"}
-
-
-  (kube-apply-request
-   kubeapi
-   {:name         "dromon"
-    :namespace    "development"
-    :fieldManager "testmanager"
-    :request      dromon-service}
-   )
-
   (def kubeapi (dynamic-create-client {:method-generators
                                        [default-method-generator
                                         {:index           :apply
@@ -347,7 +304,8 @@
                                         {:index           :http-method
                                          :indexer         kube-kind-method-indexer
                                          :make-request-fn default-request-fn}]}
-                                      base-url "/openapi/v2" {:token "client token"}))
+                                      base-url "/openapi/v2" {:get-token-fn (constantly "some token yo")}))
+
 
   (kube-apply-request
    kubeapi
@@ -356,6 +314,16 @@
     :fieldManager "testmanager"
     :request      dromon-service}
    )
-
+;; => {:method "patch",
+;;     :as :json,
+;;     :save-request? true,
+;;     :headers {:authorization "Bearer some token yo"},
+;;     :url "http://127.0.0.1:8001/api/v1/namespaces/development/services/dromon",
+;;     :query-params {:fieldManager "testmanager"},
+;;     :content-type "application/apply-patch+yaml",
+;;     :throw-exceptions false,
+;;     :body
+;;     "{\"apiVersion\":\"v1\",\"kind\":\"Service\",\"metadata\":{\"name\":\"dromon\",\"labels\":{\"name\":\"dromon\",\"app\":\"dromon\"}},\"spec\":{\"type\":\"NodePort\",\"ports\":[{\"name\":\"dromon\",\"port\":443,\"protocol\":\"TCP\",\"targetPort\":8443}],\"selector\":{\"app\":\"dromon\",\"name\":\"dromon\"}}}"}
   )
+
 
