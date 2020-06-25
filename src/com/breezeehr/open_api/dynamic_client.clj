@@ -136,17 +136,16 @@
                       ;;(prn method-discovery)
                       (-> init-map
                           (assoc :url (str baseUrl (path-fn op)))
-                          (assoc-in [:headers :authorization] (str "Bearer " token))
-
                           (assoc :query-params (key-sel-fn op)
                                  :save-request? true
                                  :content-type "application/apply-patch+yaml"
                                  :throw-exceptions false)
                           (cond->
-                            request (assoc :body (let [enc-body (:request op)]
-                                                   (assert enc-body (str "Request cannot be nil for operation " (:op op)))
-                                                   (doto (cheshire.core/generate-string enc-body)
-                                                     prn))))))}))
+                              token (assoc-in [:headers :authorization] (str "Bearer " token))
+                              request (assoc :body (let [enc-body (:request op)]
+                                                     (assert enc-body (str "Request cannot be nil for operation " (:op op)))
+                                                     (doto (cheshire.core/generate-string enc-body)
+                                                       prn))))))}))
   )
 
 (defn make-method [{:keys [baseUrl] :as api-discovery}
