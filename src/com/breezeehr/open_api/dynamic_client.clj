@@ -119,7 +119,7 @@
                                                prn))))))})
   )
 
-(defn apply-request-fn [{:strs [baseUrl parameters httpMethod operationId opts] :as method-discovery}]
+(defn apply-request-fn [{:strs [baseUrl parameters httpMethod operationId] :as method-discovery}]
   (when (some #(= % "application/apply-patch+yaml") (get method-discovery "consumes"))
     (let [init-map    {:method httpMethod
                        :as     :json}
@@ -129,11 +129,10 @@
                             (comp
                               (filter (comp #(= % "body") #(get % "in"))))
                             parameters)
-          request     (first body-params)
-          get-token-fn (:get-token-fn opts)]
+          request     (first body-params)]
       {:id          (patch->apply operationId)
        :description (get method-discovery "description")
-       :request     (fn [client op]
+       :request     (fn [{:keys [get-token-fn] :as client} op]
                       ;;(prn method-discovery)
                       (-> init-map
                           (assoc :url (str baseUrl (path-fn op)))
@@ -151,28 +150,25 @@
 (defn make-method [{:keys [baseUrl] :as api-discovery}
                    upper-parameters
                    path
-                   {:keys [make-request-fn indexer ]}
-                   opts
-                   ]
+                   {:keys [make-request-fn indexer ]}]
   (fn [acc httpMethod method-discovery]
     (let [method-discovery (-> method-discovery
                                (update  "parameters" into upper-parameters)
                                ;;TODO will need to be added conditionally
                                (assoc "path" path
-                                      "opts" opts
                                       "baseUrl" baseUrl
                                       "httpMethod" httpMethod))]
       (if-some [req-fn (make-request-fn method-discovery)]
         (indexer acc method-discovery req-fn)
         acc))))
 
-(defn prepare-methods [acc api-discovery path parameters method-generator methods opts]
+(defn prepare-methods [acc api-discovery path parameters method-generator methods]
   (reduce-kv
-    (make-method api-discovery parameters path method-generator opts)
+    (make-method api-discovery parameters path method-generator)
     acc
     methods))
 
-(defn prepare-paths [api-discovery method-generator paths opts]
+(defn prepare-paths [api-discovery method-generator paths]
   (reduce-kv
     (fn [acc path {:strs [parameters] :as premethod}]
       (prepare-methods
@@ -181,8 +177,7 @@
         path
         parameters
         method-generator
-        (dissoc premethod "parameters")
-        opts))
+        (dissoc premethod "parameters")))
     {}
     paths))
 
@@ -207,7 +202,7 @@
                                :make-request-fn default-request-fn})
 
 (defn dynamic-create-client
-  ([config base-uri path opt]
+  ([config base-uri path]
    (let [client (init-client config)
          api-discovery
                 (get-openapi-spec client base-uri path)
@@ -216,14 +211,12 @@
      (reduce
        (fn [acc method-generator]
          (assoc acc
-           (:index method-generator)
+                (:index method-generator)
 
-           (prepare-paths
-                  api-discovery
-                  method-generator
-                  (get api-discovery "paths")
-                  opt))
-         )
+                (prepare-paths
+                 api-discovery
+                 method-generator
+                 (get api-discovery "paths"))))
        client
        method-generators)
      )))
@@ -296,7 +289,8 @@
       :ports    [{:name "dromon", :port 443, :protocol "TCP", :targetPort 8443}],
       :selector {:app "dromon", :name "dromon"}}})
 
-  (def kubeapi (dynamic-create-client {:method-generators
+  (def kubeapi (dynamic-create-client {:get-token-fn (constantly "some token yo")
+                                       :method-generators
                                        [default-method-generator
                                         {:index           :apply
                                          :indexer         kube-kind-indexer
@@ -304,7 +298,7 @@
                                         {:index           :http-method
                                          :indexer         kube-kind-method-indexer
                                          :make-request-fn default-request-fn}]}
-                                      base-url "/openapi/v2" {:get-token-fn (constantly "some token yo")}))
+                                      base-url "/openapi/v2"))
 
 
   (kube-apply-request
@@ -314,6 +308,7 @@
     :fieldManager "testmanager"
     :request      dromon-service}
    )
+
 ;; => {:method "patch",
 ;;     :as :json,
 ;;     :save-request? true,
