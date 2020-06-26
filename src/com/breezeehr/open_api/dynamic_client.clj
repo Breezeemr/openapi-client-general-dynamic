@@ -132,7 +132,7 @@
           request     (first body-params)]
       {:id          (patch->apply operationId)
        :description (get method-discovery "description")
-       :request     (fn [{:keys [get-token-fn insecure?] :as client} op]
+       :request     (fn [{:keys [get-token-fn pool] :as client} op]
                       ;;(prn method-discovery)
                       (-> init-map
                           (assoc :url (str baseUrl (path-fn op)))
@@ -141,7 +141,7 @@
                                  :content-type "application/apply-patch+yaml"
                                  :throw-exceptions false)
                           (cond->
-                              insecure? (assoc :pool (http/connection-pool {:connection-options {:insecure? true}}) )
+                              pool (assoc :pool pool)
                               get-token-fn (assoc-in [:headers :authorization] (str "Bearer " (get-token-fn)))
                               request (assoc :body (let [enc-body (:request op)]
                                                      (assert enc-body (str "Request cannot be nil for operation " (:op op)))
@@ -185,13 +185,16 @@
 (defn init-client [config]
   config)
 
-(defn get-openapi-spec [client base-url path]
+(defn get-openapi-spec [{:keys [get-token-fn pool] :as client} base-url path]
   (->
     {:method :get
      :url    (str base-url path)}
     (assoc :throw-exceptions false
            :save-request? true
            :as :json-string-keys)
+    (cond->
+        pool (assoc :pool pool)
+        get-token-fn (assoc-in [:headers :authorization] (str "Bearer " (get-token-fn))))
     http/request
     deref
     :body
@@ -291,7 +294,7 @@
       :selector {:app "dromon", :name "dromon"}}})
 
   (def kubeapi (dynamic-create-client {:get-token-fn (constantly "some token yo")
-                                       :insecure? true
+                                       :pool (http/connection-pool {:connection-options {:insecure? true}})
                                        :method-generators
                                        [default-method-generator
                                         {:index           :apply
