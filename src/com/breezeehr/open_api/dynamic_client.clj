@@ -132,7 +132,7 @@
           request     (first body-params)]
       {:id          (patch->apply operationId)
        :description (get method-discovery "description")
-       :request     (fn [{:keys [get-token-fn] :as client} op]
+       :request     (fn [{:keys [get-token-fn insecure?] :as client} op]
                       ;;(prn method-discovery)
                       (-> init-map
                           (assoc :url (str baseUrl (path-fn op)))
@@ -141,6 +141,7 @@
                                  :content-type "application/apply-patch+yaml"
                                  :throw-exceptions false)
                           (cond->
+                              insecure? (assoc :pool (http/connection-pool {:connection-options {:insecure? true}}) )
                               get-token-fn (assoc-in [:headers :authorization] (str "Bearer " (get-token-fn)))
                               request (assoc :body (let [enc-body (:request op)]
                                                      (assert enc-body (str "Request cannot be nil for operation " (:op op)))
@@ -290,6 +291,7 @@
       :selector {:app "dromon", :name "dromon"}}})
 
   (def kubeapi (dynamic-create-client {:get-token-fn (constantly "some token yo")
+                                       :insecure? true
                                        :method-generators
                                        [default-method-generator
                                         {:index           :apply
