@@ -5,8 +5,7 @@
   (let [api-discovery (->
                         {:method :get
                          :url    (str base-url path)}
-                        (assoc :throw-exceptions false
-                               :save-request? true
+                        (assoc :save-request? true
                                :as :json-string-keys)
                         (cond->
                           pool (assoc :pool pool)
