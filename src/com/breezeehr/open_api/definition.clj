@@ -55,13 +55,17 @@
 (defn get-methods
   "Flatten all the methods from the open api spec"
   [{:strs [servers] :as spec}]
-  (fn [p]
-    (let [path (key p)
-          path-item (val p)
-          servers (or (get path-item "servers") servers)]
-      (eduction
-        (keep (enrich-method path servers (get path-item "parameters")))
-        path-item))))
+  (let [global-parameters (-> spec
+                              (get "components")
+                              (get "parameters")
+                              vals)]
+    (fn [p]
+      (let [path (key p)
+            path-item (val p)
+            servers (or (get path-item "servers") servers)]
+        (eduction
+          (keep (enrich-method path servers (into (get path-item "parameters") global-parameters)))
+          path-item)))))
 
 (defn spec-methods
   "Flatten all the methods from the open api spec"
