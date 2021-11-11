@@ -2,6 +2,7 @@
  :deps {org.clojure/clojure {:mvn/version "1.10.1"}
         cheshire                           {:mvn/version "5.10.0"}
         com.cemerick/url                   {:mvn/version "0.1.1"}
+        clj-wrap-indent/clj-wrap-indent    {:mvn/version "1.0.0"}
         aleph                              {:mvn/version "0.4.6"}}
  :aliases
  {:test {:extra-paths ["test"]

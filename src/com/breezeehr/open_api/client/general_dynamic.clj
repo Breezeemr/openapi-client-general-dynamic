@@ -3,6 +3,7 @@
     [com.breezeehr.open-api.definition :refer [spec-methods
                                                get-openapi-spec]]
     [aleph.http :as http]
+    [clj-wrap-indent.core :as wrap]
     [cheshire.core]))
 
 (defn fast-select-keys [map ks]
@@ -66,6 +67,7 @@
     (assert baseUrl)
     {:id          operationId
      :description (get method-discovery "description")
+     :parameters parameters
      :request     (fn [client op]
                     ;;(prn method-discovery)
                     (-> init-map
@@ -90,18 +92,42 @@
                                    new-operation-request-fn))
                             (spec-methods api-discovery))))
 
-(defn operation-dynamic-client [config base-uri path]
-  (let [client (init-client config)
-        api-discovery
-        (get-openapi-spec client base-uri path)]
-    (add-operation-support client api-discovery)))
+(defn operation-dynamic-client
+  ([config]
+   (let [client (init-client config)
+         api-discovery
+         (get-openapi-spec config)]
+     (add-operation-support client api-discovery)))
+  ([config base-uri path]
+   (let [client (init-client config)
+         api-discovery
+         (get-openapi-spec client base-uri path)]
+     (add-operation-support client api-discovery))))
+
+(defn print-params [params]
+  (doseq [{:strs          [required name] opdesc "description"
+           {:strs [type]} "schema"} params]
+    (println "      " name
+             " type: "
+             type
+             (if required
+               " required "
+               " optional "))
+    (when opdesc
+      (wrap/println opdesc 80 14))))
 
 (defn ops [client]
   (run!
-    (fn [[id {:keys [description]}]]
+    (fn [[id {:keys [description parameters] :as x}]]
       (println "* " id)
-      (print description)
-      (println \newline))
+      (when-some [params (not-empty (filter (comp #{"path"} #(get % "in")) parameters))]
+        (println "   path-parameters:")
+        (print-params params))
+      (when-some [params (not-empty (filter (comp #{"query"} #(get % "in") ) parameters))]
+        (println "   query-parameters:")
+        (print-params params))
+      (println "   description:")
+      (wrap/println description))
     (->> client ::ops
          (sort-by key))))
 

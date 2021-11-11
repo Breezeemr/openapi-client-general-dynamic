@@ -1,21 +1,40 @@
 (ns com.breezeehr.open-api.definition
   (:require [aleph.http :as http]))
 
-(defn get-openapi-spec [{:keys [get-token-fn pool] :as client} base-url path]
-  (let [api-discovery (->
-                        {:method :get
-                         :url    (str base-url path)}
-                        (assoc :save-request? true
-                               :as :json-string-keys)
-                        (cond->
-                          pool (assoc :pool pool)
-                          get-token-fn (assoc-in [:headers :authorization] (str "Bearer " (get-token-fn))))
-                        http/request
-                        deref
-                        :body)]
-    (cond-> api-discovery
-            (not (not-empty (get api-discovery "servers")))
-            (assoc "servers" [{"url" base-url}]))))
+(defn get-openapi-spec
+  ([{:keys [get-token-fn pool base-url path raw] :as client}]
+   (let [api-discovery (if raw
+                         raw
+                         (->
+                           {:method :get
+                            :url    (str base-url path)}
+                           (assoc :save-request? true
+                                  :as :json-string-keys)
+                           (cond->
+                             pool (assoc :pool pool)
+                             get-token-fn (assoc-in [:headers :authorization] (str "Bearer " (get-token-fn))))
+                           http/request
+                           deref
+                           :body))]
+     (cond-> api-discovery
+             (not (not-empty (get api-discovery "servers")))
+             (assoc "servers" [{"url" base-url}])
+             raw (dissoc raw))))
+  ([{:keys [get-token-fn pool] :as client} base-url path]
+   (let [api-discovery (->
+                         {:method :get
+                          :url    (str base-url path)}
+                         (assoc :save-request? true
+                                :as :json-string-keys)
+                         (cond->
+                           pool (assoc :pool pool)
+                           get-token-fn (assoc-in [:headers :authorization] (str "Bearer " (get-token-fn))))
+                         http/request
+                         deref
+                         :body)]
+     (cond-> api-discovery
+             (not (not-empty (get api-discovery "servers")))
+             (assoc "servers" [{"url" base-url}])))))
 
 
 (defn enrich-method [path lower-servers lower-parameters]
@@ -57,5 +76,4 @@
   (def api-data (get-openapi-spec {} base-url "/openapi/v2"))
   (keys api-data)
   (into [] (spec-methods api-data))
-
   )
