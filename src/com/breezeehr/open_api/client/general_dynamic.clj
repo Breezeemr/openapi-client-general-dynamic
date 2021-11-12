@@ -53,34 +53,56 @@
   (cond-> request
     pool (assoc :pool pool)
     get-token-fn (assoc-in [:headers :authorization] (str "Bearer " (get-token-fn)))))
-(defn new-operation-request-fn [{:strs [servers parameters httpMethod operationId] :as method-discovery}]
+
+(defn request-body-encoding [{content "content"}]
+  (let [[content-type data] (-> content first)])
+  )
+
+(defn new-operation-request-fn [{:strs [servers parameters requestBody
+                                        httpMethod operationId]
+                                 :as method-discovery}]
   (let [init-map     {:method httpMethod
                       :as     :json}
         path-fn      (make-path-fn method-discovery)
-        key-sel-fn (make-key-sel-fn method-discovery)
+        key-sel-fn   (make-key-sel-fn method-discovery)
         body-params  (into []
                            (comp
                              (filter (comp #(= % "body") #(get % "in"))))
                            parameters)
-        request      (first body-params)
+        requestBody (or (when-some [x (first body-params)]
+                          {"content"  {"application/json" {}}
+                           "required" true})
+                        requestBody)
         baseUrl (get (first servers) "url")]
     (assert baseUrl)
     {:id          operationId
      :description (get method-discovery "description")
-     :parameters parameters
+     :parameters  parameters
      :request     (fn [client op]
                     ;;(prn method-discovery)
-                    (-> init-map
-                        (assoc :url (str baseUrl (path-fn op)))
+                    (let [enc-body (:request op)
+                          content (get requestBody "content")
+                          content-type (or (:content-type op)
+                                           (and (= 1 (count content))
+                                                (some-> content
+                                                        first key)))]
+                      (when (get requestBody "required")
+                        (assert enc-body (str "Request cannot be nil for operation " (:op op)))
+                        (assert content-type (str "Request must suply content-type for operation " (:op op))))
+                      (-> init-map
+                          (assoc :url (str baseUrl (path-fn op)))
 
-                        (assoc :query-params (key-sel-fn op)
-                               :save-request? true
-                               :throw-exceptions false)
-                        (augment-request client)
-                        (cond->
-                          request (assoc :body (let [enc-body (:request op)]
-                                                 (assert enc-body (str "Request cannot be nil for operation " (:op op)))
-                                                 (cheshire.core/generate-string enc-body))))))}))
+                          (assoc :query-params (key-sel-fn op)
+                                 :save-request? true
+                                 :throw-exceptions false)
+                          (augment-request client)
+                          (cond->
+                            (:request op)
+                            (assoc :form-params (:request op))
+                            content-type
+                            (assoc :content-type (case content-type
+                                                   "application/json" :json
+                                                   "application/x-www-form-urlencoded" :x-www-form-urlencoded))))))}))
 
 (defn init-client [config]
   config)
