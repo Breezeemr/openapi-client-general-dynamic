@@ -61,8 +61,8 @@
 (defn new-operation-request-fn [{:strs [servers parameters requestBody
                                         httpMethod operationId]
                                  :as method-discovery}]
-  (let [init-map     {:method httpMethod
-                      :as     :json}
+  (let [init-map {:method (keyword httpMethod)
+                  :as     :json}
         path-fn      (make-path-fn method-discovery)
         key-sel-fn   (make-key-sel-fn method-discovery)
         body-params  (into []
