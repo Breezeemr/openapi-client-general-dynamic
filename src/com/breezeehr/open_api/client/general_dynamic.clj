@@ -85,7 +85,13 @@
                           content-type (or (:content-type op)
                                            (and (= 1 (count content))
                                                 (some-> content
-                                                        first key)))]
+                                                        first key)))
+                          success-response (or (:as op)
+                                               (some-> requestBody
+                                                       (get "responses")
+                                                       (get "200")
+                                                       (get "content")
+                                                       first key))]
                       (when (get requestBody "required")
                         (assert enc-body (str "Request cannot be nil for operation " (:op op)))
                         (assert content-type (str "Request must suply content-type for operation " (:op op))))
@@ -93,7 +99,6 @@
                           (assoc :url (str baseUrl (path-fn op)))
 
                           (assoc :query-params (key-sel-fn op)
-                                 :save-request? true
                                  :throw-exceptions false)
                           (augment-request client)
                           (cond->
@@ -102,7 +107,12 @@
                             content-type
                             (assoc :content-type (case content-type
                                                    "application/json" :json
-                                                   "application/x-www-form-urlencoded" :x-www-form-urlencoded))))))}))
+                                                   "application/x-www-form-urlencoded" :x-www-form-urlencoded))
+                            success-response
+                            (assoc :as (case success-response
+                                         "application/json" :json
+                                         "application/x-www-form-urlencoded" :x-www-form-urlencoded))
+                            ))))}))
 
 (defn init-client [config]
   config)
