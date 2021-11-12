@@ -36,8 +36,20 @@
              (not (not-empty (get api-discovery "servers")))
              (assoc "servers" [{"url" base-url}])))))
 
+(defn lookup-ref [spec path level depth]
+  (if (< level depth)
+    (let [path-item (nth path level)]
+      (recur (get spec path-item) path (inc level) depth))
+    spec))
 
-(defn enrich-method [path lower-servers lower-parameters]
+(defn ref-inliner [spec]
+  (fn [{r "$ref" :as item}]
+    (if r
+      (let [path (clojure.string/split r #"/")]
+        (lookup-ref spec path 1 (count path)))
+      item)))
+
+(defn enrich-method [path lower-servers lower-parameters ref-inliner]
   (fn [m]
     (let [method-key (key m)
           {:strs [servers parameters] :as method} (val m)]
@@ -47,25 +59,28 @@
                 (and (not servers)
                      lower-servers) (assoc "servers" lower-servers)
                 lower-servers
-                (assoc "parameters" (into lower-parameters parameters))
+                (assoc "parameters" (-> []
+                                        (into (map ref-inliner) lower-parameters )
+                                        (into (map ref-inliner) parameters)))
                 )
         "$ref" (throw (ex-info "\"$ref\" on path object is not supported" {}))
         ("summary" "description" "servers" "parameters") nil))))
 
+(defn inline-parameter-refs [path-item parameter-refs]
+  (prn path-item)
+  #_(into [] (map (fn [{ref "$ref" :as x}]
+                  (prn x)
+                  (get parameter-refs ref))) parameters))
 (defn get-methods
   "Flatten all the methods from the open api spec"
   [{:strs [servers] :as spec}]
-  (let [global-parameters (-> spec
-                              (get "components")
-                              (get "parameters")
-                              vals)]
-    (fn [p]
-      (let [path (key p)
-            path-item (val p)
-            servers (or (get path-item "servers") servers)]
-        (eduction
-          (keep (enrich-method path servers (into (get path-item "parameters") global-parameters)))
-          path-item)))))
+  (fn [p]
+    (let [path (key p)
+          path-item (val p)
+          servers (or (get path-item "servers") servers)]
+      (eduction
+        (keep (enrich-method path servers (get path-item "parameters") (ref-inliner spec)))
+        path-item))))
 
 (defn spec-methods
   "Flatten all the methods from the open api spec"
