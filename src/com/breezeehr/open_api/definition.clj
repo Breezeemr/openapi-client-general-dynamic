@@ -17,7 +17,7 @@
                            deref
                            :body))]
      (cond-> api-discovery
-             (not (not-empty (get api-discovery "servers")))
+             true #_(not (not-empty (get api-discovery "servers")))
              (assoc "servers" [{"url" base-url}])
              raw (dissoc raw))))
   ([{:keys [get-token-fn pool] :as client} base-url path]
@@ -33,7 +33,7 @@
                          deref
                          :body)]
      (cond-> api-discovery
-             (not (not-empty (get api-discovery "servers")))
+             true #_(not (not-empty (get api-discovery "servers")))
              (assoc "servers" [{"url" base-url}])))))
 
 (defn lookup-ref [spec path level depth]
