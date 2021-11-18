@@ -171,9 +171,14 @@
                       (:version client)))
     (opfn client operation)))
 
-(defn invoke [client {:keys [op] :as operation}]
-  (let [r (request client operation)]
-    (http/request r)))
+(defn make-request [client request]
+  (let [make-request-fn (-> client  (get ::make-request http/request))]
+    (make-request-fn request)))
+
+(defn invoke [client operation]
+  (make-request client (request client operation)))
+
+
 
 
 (comment
