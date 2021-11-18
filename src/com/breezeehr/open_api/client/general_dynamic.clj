@@ -98,8 +98,7 @@
                       (-> init-map
                           (assoc :url (str baseUrl (path-fn op)))
 
-                          (assoc :query-params (key-sel-fn op)
-                                 :throw-exceptions false)
+                          (assoc :query-params (key-sel-fn op))
                           (augment-request client)
                           (cond->
                             (:request op)
