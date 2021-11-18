@@ -171,7 +171,7 @@
     (opfn client operation)))
 
 (defn make-request [client request]
-  (let [make-request-fn (-> client  (get ::make-request http/request))]
+  (let [make-request-fn (get client ::make-request http/request)]
     (make-request-fn request)))
 
 (defn invoke [client operation]
